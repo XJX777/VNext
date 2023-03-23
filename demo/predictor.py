@@ -10,7 +10,14 @@ from detectron2.data import MetadataCatalog
 from detectron2.engine.defaults import DefaultPredictor
 from detectron2.utils.video_visualizer import VideoVisualizer
 from detectron2.utils.visualizer import ColorMode, Visualizer
-
+from glob import glob
+import cv2
+import numpy as np
+from pycocotools import mask as maskUtils
+from matplotlib.colors import ListedColormap
+# from demo.predictor import VisualizationDemo
+import matplotlib.pyplot as plt
+import random
 
 class VisualizationDemo(object):
     def __init__(self, cfg, instance_mode=ColorMode.IMAGE, parallel=False):
@@ -28,6 +35,13 @@ class VisualizationDemo(object):
         self.instance_mode = instance_mode
 
         self.parallel = parallel
+
+        # generate 256 unique colors
+        self.colors = plt.cm.get_cmap('tab20b', 256)
+
+        # convert colors to RGB format
+        self.colors = (255 * self.colors(np.arange(256))).astype('int')
+
         if parallel:
             num_gpu = torch.cuda.device_count()
             self.predictor = AsyncPredictor(cfg, num_gpus=num_gpu)
@@ -84,10 +98,16 @@ class VisualizationDemo(object):
         Yields:
             ndarray: BGR visualizations of each video frame.
         """
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        org = (50, 50)
+        fontScale = 1
+        textcolor = (0, 0, 255)
+        thickness = 1
+        
         video_visualizer = VideoVisualizer(self.metadata, self.instance_mode)
 
         def process_predictions(frame, predictions):
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            #frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             if "panoptic_seg" in predictions:
                 panoptic_seg, segments_info = predictions["panoptic_seg"]
                 vis_frame = video_visualizer.draw_panoptic_seg_predictions(
@@ -102,8 +122,34 @@ class VisualizationDemo(object):
                 )
 
             # Converts Matplotlib RGB format to OpenCV BGR format
-            vis_frame = cv2.cvtColor(vis_frame.get_image(), cv2.COLOR_RGB2BGR)
-            return vis_frame
+            #vis_frame = cv2.cvtColor(vis_frame.get_image(), cv2.COLOR_RGB2BGR)
+            alpha = 0.5  # define the opacity of the overlay
+            overlay = np.zeros_like(frame)
+
+            for i, mask in enumerate(predictions['pred_masks']):
+                if  predictions["pred_scores"][i] >= 0.4:
+                    if mask[0] is not None:
+                        binary_mask = (mask[0].numpy()).astype(np.uint8)
+                    else:
+                        #binary_mask = np.array(np.zeros((predictions['image_size'][0],predictions['image_size'][1] , 1)), order="F", dtype="uint8")
+                        pass
+                    
+                    if np.any(binary_mask):
+                        #id = predictions["id_list"][i]
+                        color = tuple(self.colors[i][:3])
+                        overlay[binary_mask == 1] = color
+
+            frame = cv2.addWeighted(frame, 0.8 , overlay, alpha, 0)
+
+
+            for id, bbox in zip(predictions["id_list"],predictions["bboxes"]):
+                p1, p2 = (int(bbox[0]), int(bbox[1])), (int(bbox[2]), int(bbox[3]))
+                frame = cv2.rectangle(frame, p1, p2, textcolor, thickness=1, lineType=cv2.LINE_AA)
+                frame = cv2.putText(frame, str(id), p1, font, 0.5, textcolor, thickness,
+                                    cv2.LINE_AA)
+
+            #vis_frame =  cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+            return frame
 
         frame_gen = self._frame_from_video(video)
         if self.parallel:

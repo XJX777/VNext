@@ -86,7 +86,7 @@ class IDOL(nn.Module):
 
         ### inference setting
         self.merge_on_cpu = cfg.MODEL.IDOL.MERGE_ON_CPU
-        self.is_multi_cls = cfg.MODEL.IDOL.MULTI_CLS_ON
+        self.is_multi_cls = False #cfg.MODEL.IDOL.MULTI_CLS_ON
         self.apply_cls_thres = cfg.MODEL.IDOL.APPLY_CLS_THRES
         self.temporal_score_type = cfg.MODEL.IDOL.TEMPORAL_SCORE_TYPE
         self.inference_select_thres =  cfg.MODEL.IDOL.INFERENCE_SELECT_THRES
@@ -203,7 +203,6 @@ class IDOL(nn.Module):
         self.to(self.device)
 
         self.merge_device = "cpu" if self.merge_on_cpu else self.device
-        self.animal_counter = Counter()
         self.idol_tracker = IDOL_Tracker(
             init_score_thr=0.1,
             obj_score_thr=0.1,
@@ -382,8 +381,6 @@ class IDOL(nn.Module):
             frame_id=i_frame,
             indices = indices)
             indices = torch.tensor(indices)[ids>-1].tolist()
-            for indice in indices:
-                self.animal_counter[indice] += 1
             ids = ids[ids > -1]
             ids = ids.tolist()
             # if len(ids) > 0:

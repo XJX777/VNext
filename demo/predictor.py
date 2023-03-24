@@ -35,18 +35,20 @@ class VisualizationDemo(object):
         self.instance_mode = instance_mode
 
         self.parallel = parallel
-
-        # generate 256 unique colors
-        self.colors = plt.cm.get_cmap('tab20b', 256)
-
-        # convert colors to RGB format
-        self.colors = (255 * self.colors(np.arange(256))).astype('int')
+        i = 0
+        self.colors = []
+        while i < 256:
+            color1 = (list(np.random.choice(range(256), size=3)))
+            self.colors.append([int(color1[0]), int(color1[1]), int(color1[2])])
+            i += 1
 
         if parallel:
             num_gpu = torch.cuda.device_count()
             self.predictor = AsyncPredictor(cfg, num_gpus=num_gpu)
         else:
             self.predictor = DefaultPredictor(cfg)
+        
+        #self.categories=["Person","Bird","Cat","Dog","Horse","Sheep","Cow","Elephant","Bear","Zebra","Giraffe","Poultry","Giant panda","Lizard","Parrot","Monkey","Rabbit","Tiger","Fish","Turtle","Bicycle","Motorcycle","Airplane","Boat","Vehicle"]
 
     def run_on_image(self, image):
         """
@@ -107,48 +109,34 @@ class VisualizationDemo(object):
         video_visualizer = VideoVisualizer(self.metadata, self.instance_mode)
 
         def process_predictions(frame, predictions):
-            #frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            if "panoptic_seg" in predictions:
-                panoptic_seg, segments_info = predictions["panoptic_seg"]
-                vis_frame = video_visualizer.draw_panoptic_seg_predictions(
-                    frame, panoptic_seg.to(self.cpu_device), segments_info
-                )
-            elif "instances" in predictions:
-                predictions = predictions["instances"].to(self.cpu_device)
-                vis_frame = video_visualizer.draw_instance_predictions(frame, predictions)
-            elif "sem_seg" in predictions:
-                vis_frame = video_visualizer.draw_sem_seg(
-                    frame, predictions["sem_seg"].argmax(dim=0).to(self.cpu_device)
-                )
 
             # Converts Matplotlib RGB format to OpenCV BGR format
-            #vis_frame = cv2.cvtColor(vis_frame.get_image(), cv2.COLOR_RGB2BGR)
-            alpha = 0.5  # define the opacity of the overlay
+            # vis_frame = cv2.cvtColor(vis_frame.get_image(), cv2.COLOR_RGB2BGR)
+            alpha = 0.3  # define the opacity of the overlay
             overlay = np.zeros_like(frame)
 
-            for i, mask in enumerate(predictions['pred_masks']):
-                if  predictions["pred_scores"][i] >= 0.4:
+            for i, (id, bbox, mask, pred_score, pred_label) in enumerate(
+                    zip(predictions['id_list'], predictions['bboxes'], predictions['pred_masks'],
+                        predictions['pred_scores'], predictions['pred_labels'])):
+                if   pred_score >= 0.4:
                     if mask[0] is not None:
                         binary_mask = (mask[0].numpy()).astype(np.uint8)
                     else:
-                        #binary_mask = np.array(np.zeros((predictions['image_size'][0],predictions['image_size'][1] , 1)), order="F", dtype="uint8")
+                        # binary_mask = np.array(np.zeros((predictions['image_size'][0],predictions['image_size'][1] , 1)), order="F", dtype="uint8")
                         pass
-                    
+
                     if np.any(binary_mask):
-                        #id = predictions["id_list"][i]
-                        color = tuple(self.colors[i][:3])
+                        p1, p2 = (int(bbox[0]), int(bbox[1])), (int(bbox[2]), int(bbox[3]))
+                        frame = cv2.rectangle(frame, p1, p2, (0,0,0), thickness=1, lineType=cv2.LINE_AA)
+                        txt_str = "ID: " + str(id) +" Class: " + self.metadata.thing_classes[pred_label]  + " Conf: " +str(round(pred_score,2))
+                        frame = cv2.putText(frame, txt_str , p1, font, 0.5, (0,0,0), thickness,cv2.LINE_AA)
+
+                        # id = predictions["id_list"][i]
+                        color = tuple(self.colors[id])
                         overlay[binary_mask == 1] = color
 
-            frame = cv2.addWeighted(frame, 0.8 , overlay, alpha, 0)
+            frame = cv2.addWeighted(frame, 1- alpha , overlay, alpha, 0)
 
-
-            for id, bbox in zip(predictions["id_list"],predictions["bboxes"]):
-                p1, p2 = (int(bbox[0]), int(bbox[1])), (int(bbox[2]), int(bbox[3]))
-                frame = cv2.rectangle(frame, p1, p2, textcolor, thickness=1, lineType=cv2.LINE_AA)
-                frame = cv2.putText(frame, str(id), p1, font, 0.5, textcolor, thickness,
-                                    cv2.LINE_AA)
-
-            #vis_frame =  cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
             return frame
 
         frame_gen = self._frame_from_video(video)

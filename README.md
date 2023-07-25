@@ -1,8 +1,8 @@
 # VNext: 
 
 
-
-
+quick start:
+python projects/IDOL/demo_idol.py --config-file projects/IDOL/configs/ovis_swin.yaml --video-input input.mp4 --output output1.mp4
 
 <p align="center"><img src="assets/VNext.png" width="300"/></p>
 
